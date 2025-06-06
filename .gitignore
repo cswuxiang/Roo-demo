@@ -1,0 +1,5 @@
+node_modules/
+.env
+proxy_api.py
+README.md
+app.json
