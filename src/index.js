@@ -13,7 +13,7 @@ dotenv.config();
 const app = express();
 
 // 配置参数
-const TARGET_API_BASE_URL = process.env.TARGET_API_BASE_URL
+const TARGET_API_BASE_URL = process.env.DEEPSEEK_API_URL
 const WORKSPACE_ID = process.env.WORKSPACE_ID;
 const API_KEY_PREFIX = process.env.API_KEY_PREFIX ;
 const TARGET_API_KEY_PREFIX = process.env.TARGET_API_KEY_PREFIX;
@@ -81,6 +81,7 @@ async function handleNonStreaming(targetUrl, headers, body) {
             headers: headers,
             timeout: 60000
         });
+        console.log(`Response from target API: ${response.data}`);
         
         return {
             data: response.data,
@@ -88,7 +89,7 @@ async function handleNonStreaming(targetUrl, headers, body) {
             headers: { "Content-Type": "application/json" }
         };
     } catch (error) {
-        throw new Error(`Error forwarding request: ${error.message}`);
+        throw new Error(`Error forwarding request: ${error}`);
     }
 }
 
@@ -168,13 +169,15 @@ app.post('/v1/chat/completions', async (req, res) => {
         const headers = buildHeaders(authHeader);
         const stream = false;
         const targetUrl = `${TARGET_API_BASE_URL}/chat/completions`;
-d   
+
+   console.log(`Forwarding request to target API: ${targetUrl}`,headers);
         if (stream) {
             // 流式处理
             await handleStreaming(targetUrl, headers, body, res);
         } else {
             // 非流式处理
             const result = await handleNonStreaming(targetUrl, headers, body);
+            console.log(`Response from target API: ${JSON.stringify(result.data)}`);
             res.status(result.status).set(result.headers).json(result.data);
         }
         
