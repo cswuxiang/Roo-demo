@@ -167,7 +167,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 
         const authHeader = req.headers.authorization || "";
         const headers = buildHeaders(authHeader);
-        const stream = false;
+        const stream = true;
         const targetUrl = `${TARGET_API_BASE_URL}/chat/completions`;
 
    console.log(`Forwarding request to target API: ${targetUrl}`,headers);
