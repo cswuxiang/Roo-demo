@@ -10,17 +10,23 @@ const { v4: uuidv4 } = require('uuid');
 dotenv.config();
 
 const app = express();
+
 // 配置参数
+// 读取配置文件.config-venus.js
+const config = require('../config-venus.js');
 const {
-  DEEPSEEK_API_UR: TARGET_API_BASE_URL,
-  WORKSPACE_ID,
-  API_KEY_PREFIX,
-  TARGET_API_KEY_PREFIX,
-  modelName,
+  targetApiBaseUrl,
+  targetApiKeyPrefix,
+  apiKeyPrefix,
+  port,
+  host,
+  token,
   enableStream,
-  HOST,
-  PORT
-} = require('../config-hunyuan.js');
+  chatCompletionsPath,
+  modelsPath,
+  workspaceId,
+  modelName
+} = config;
 
 // 日志配置
 const logger = winston.createLogger({
@@ -31,7 +37,7 @@ const logger = winston.createLogger({
   ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'hunyuan.log' })
+    new winston.transports.File({ filename: 'venus.log' })
   ]
 });
 
@@ -57,21 +63,20 @@ const httpClient = axios.create({
 // 辅助函数：处理认证头
 function processAuthHeader (authHeader) {
   let apiKey = authHeader || '';
-  console.log(`apiKey: ${apiKey} API_KEY_PREFIX: ${API_KEY_PREFIX}`);
-  if (apiKey.startsWith(API_KEY_PREFIX)) {
-    apiKey = apiKey.substring(API_KEY_PREFIX.length);
+
+  if (apiKey.startsWith(apiKeyPrefix)) {
+    apiKey = apiKey.substring(apiKeyPrefix.length);
   }
-  console.log(`==processAuthHeader====: ${TARGET_API_KEY_PREFIX}${apiKey}`);
-  return `${TARGET_API_KEY_PREFIX}${apiKey}`;
+  return `${targetApiKeyPrefix}${token}`;
 }
 
 // 辅助函数：构建请求头
 function buildHeaders (authHeader, contentType = 'application/json') {
-  return {
-    Authorization: processAuthHeader(authHeader),
-    Wsid: WORKSPACE_ID,
-    'Content-Type': contentType
-  };
+  let headers = { Authorization: processAuthHeader(authHeader), 'Content-Type': contentType };
+  if (workspaceId) {
+    headers = { ...headers, Wsid: workspaceId };
+  }
+  return headers;
 }
 
 // 辅助函数：处理非流式响应
@@ -81,15 +86,12 @@ async function handleNonStreaming (targetUrl, headers, body) {
       headers,
       timeout: 60000
     });
-    console.log(`Response from target API: ${response.statusText}`);
-
     return {
       data: response.data,
       status: response.status,
       headers: { 'Content-Type': 'application/json' }
     };
   } catch (error) {
-    console.log(error);
     throw new Error(`Error forwarding request: ${error}`);
   }
 }
@@ -143,8 +145,8 @@ async function handleStreaming (targetUrl, headers, body, res) {
 }
 
 // POST /v1/chat/completions
-app.post('/v1/chat/completions', async (req, res) => {
-  console.log('----------------开始处理/v1/chat/completions请求------------');
+app.post(`/v1/${chatCompletionsPath}`, async (req, res) => {
+  console.log(`----------------开始处理/请求 ${chatCompletionsPath}------------`);
   try {
     const body = req.body;
 
@@ -165,14 +167,12 @@ app.post('/v1/chat/completions', async (req, res) => {
       body.stream = enableStream;
     }
 
-    console.log(`body: ${JSON.stringify(body)}`);
-
     const authHeader = req.headers.authorization || '';
     const headers = buildHeaders(authHeader);
     const stream = body.stream;
-    const targetUrl = `${TARGET_API_BASE_URL}/chat/completions`;
+    const targetUrl = `${targetApiBaseUrl}/${chatCompletionsPath}`;
 
-    console.log(`Forwarding request to target API: ${targetUrl}`, headers);
+    console.log(`Forwarding request to target API: ${targetUrl}`, headers, body);
 
     if (stream) {
       // 流式处理
@@ -204,7 +204,7 @@ app.post('/v1/completions', async (req, res) => {
     const authHeader = req.headers.authorization || '';
     const headers = buildHeaders(authHeader);
     const stream = body.stream || false;
-    const targetUrl = `${TARGET_API_BASE_URL}/v1/completions`;
+    const targetUrl = `${targetApiBaseUrl}/v1/completions`;
 
     if (stream) {
       // 流式处理
@@ -226,14 +226,14 @@ app.post('/v1/completions', async (req, res) => {
 });
 
 // GET /v1/models
-app.get('/v1/models', async (req, res) => {
+app.get(`/v1/${modelsPath}`, async (req, res) => {
   console.log('----------------开始处理/v1/models请求------------');
   try {
     const authHeader = req.headers.authorization || '';
     const headers = buildHeaders(authHeader);
     delete headers['Content-Type']; // GET请求不需要Content-Type
 
-    const targetUrl = `${TARGET_API_BASE_URL}/v1/models`;
+    const targetUrl = `${targetApiBaseUrl}/v1/models`;
 
     const response = await httpClient.get(targetUrl, {
       headers
@@ -261,12 +261,14 @@ app.all('*', async (req, res) => {
     // 构建新的请求头，保留原始请求的其他头
     const headers = { ...req.headers };
     headers.authorization = processAuthHeader(authHeader);
-    headers.wsid = WORKSPACE_ID;
+    if (workspaceId) {
+      headers.wsid = workspaceId;
+    }
 
     // 移除host头，因为它会被axios自动设置
     delete headers.host;
 
-    const targetUrl = `${TARGET_API_BASE_URL}/${path}`;
+    const targetUrl = `${targetApiBaseUrl}/${path}`;
 
     // 获取请求体
     let data = null;
@@ -297,18 +299,18 @@ app.all('*', async (req, res) => {
 });
 
 // 启动服务器
-app.listen(PORT, HOST, () => {
-  console.log(`Starting OpenAI API proxy server at http://${HOST}:${PORT}`);
-  console.log(`Forwarding requests to ${TARGET_API_BASE_URL}`);
-  console.log(`Using WorkSpaceID: ${WORKSPACE_ID}`);
+app.listen(port, host, () => {
+  console.log(`Starting OpenAI API proxy server at http://${host}:${port}`);
+  console.log(`Forwarding requests to ${targetApiBaseUrl}`);
+  workspaceId && console.log(`Using WorkSpaceID: ${workspaceId}`);
 
-  logger.info(`Server running on ${HOST}:${PORT}`);
+  logger.info(`Server running on ${host}:${port}`);
   console.log(`
   ╔══════════════════════════════════════════════════════════╗
   ║                                                          ║
   ║   OpenAI API Proxy Service (Node.js)                    ║
-  ║   Listening on: ${HOST}:${PORT}                          ║
-  ║   Target API: ${TARGET_API_BASE_URL}                     ║
+  ║   Listening on: ${host}:${port}                          ║
+  ║   Target API: ${targetApiBaseUrl}                     ║
   ║                                                          ║
   ║   Endpoints:                                             ║
   ║   POST /v1/chat/completions  - Chat completions          ║

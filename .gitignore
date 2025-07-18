@@ -3,3 +3,5 @@ node_modules/
 proxy_api.py
 README.md
 app.log
+config-venus.js
+config-hunyuan.js

@@ -4,7 +4,7 @@
 	"description": "OpenAI compatible proxy for DeepSeek API",
 	"main": "index.js",
 	"scripts": {
-		"start": "nodemon ./src/index.js",
+		"dev-venus": "nodemon ./src/venus.js",
 		"dev": "nodemon ./src/index.js",
 		"lint": "eslint src --fix"
 	},
