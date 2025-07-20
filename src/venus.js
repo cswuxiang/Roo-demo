@@ -44,8 +44,9 @@ const logger = winston.createLogger({
 // 安全中间件
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
-app.use(express.raw({ type: '*/*', limit: '50mb' }));
+// 设置请求体大小限制，支持大文件上传
+app.use(express.json({ limit: '50mb' }));
+// app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // 请求日志中间件
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms', {
@@ -186,7 +187,7 @@ app.post(`/v1/${chatCompletionsPath}`, async (req, res) => {
       res.status(result.status).set(result.headers).json(result.data);
     }
   } catch (error) {
-    logger.error('Error in /v1/chat/completions:', error);
+    logger.error(`Error in /${chatCompletionsPath}:`, error);
     res.status(500).json({
       error: {
         message: error.message,
